@@ -9,11 +9,19 @@ No backend, no build step, no tracking. You bring your own YouTube Data API key 
 ## Deploy to GitHub Pages
 
 1. Create a new repository — `specimen` works.
-2. Add `index.html` to the root. That's the entire application.
+2. Put `index.html` and `specimen-core.js` in the root (both required).
 3. Repository **Settings → Pages**. Under *Source*, choose **Deploy from a branch**, branch `main`, folder `/ (root)`. Save.
 4. Wait a minute. It'll be live at `https://<your-username>.github.io/specimen/`.
 
-There is no build step and no dependency install. Editing `index.html` and pushing is the whole deployment loop.
+There is no build step and no dependency install. Edit the files and push — that is the whole deployment loop.
+
+### Tests
+
+```bash
+node test/run-tests.js
+```
+
+No packages to install. The suite covers normalization, handle variants, quota estimates, memorability/uniqueness scoring, verdict thresholds, and basic HTML wiring checks.
 
 ---
 
@@ -39,10 +47,10 @@ The default daily allowance is 10,000 units and it resets at midnight Pacific. T
 
 That asymmetry is the whole reason for the mode switch:
 
-- **Handles only — 3 units.** Checks four handle variants. Enough to eliminate most candidates. You can run this roughly 3,000 times a day.
-- **Full scan — 104 units.** Adds the rival search and the collision strip. About 95 runs a day.
+- **Handles only — 3–4 units.** One unit per handle variant checked (three for a single-word name, four when multi-word forms add a joined `…hq` variant). Enough to eliminate most candidates.
+- **Full scan — 104–105 units.** Same handle checks plus `search.list` (100) and a rival stats `channels.list` (1). Roughly 95 runs a day on the default quota.
 
-Screen your shortlist in handles-only mode, then spend the full scan on the two or three names that survive.
+The UI shows the live cost for the name you typed. Screen your shortlist in handles-only mode, then spend the full scan on the two or three names that survive.
 
 ---
 

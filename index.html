@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Specimen — YouTube channel name checker</title>
 <meta name="description" content="Audition a YouTube channel name. Checks handle availability, counts collisions, and scores memorability. Bring your own API key.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://*.ggpht.com https://*.googleusercontent.com https://i.ytimg.com; connect-src https://www.googleapis.com; base-uri 'self'; form-action 'self'; frame-ancestors 'none'">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -235,13 +236,13 @@ footer a{color:var(--ink)}
       <button id="run">Audition</button>
     </div>
     <div class="modes">
-      <label><input type="radio" name="mode" value="quick" checked> Handles only <span class="cost">3 units</span></label>
-      <label><input type="radio" name="mode" value="full"> Full scan, finds rival channels <span class="cost">104 units</span></label>
+      <label><input type="radio" name="mode" value="quick" checked> Handles only <span class="cost" id="costQuick">— units</span></label>
+      <label><input type="radio" name="mode" value="full"> Full scan, finds rival channels <span class="cost" id="costFull">— units</span></label>
       <span class="cost" id="quota" style="margin-left:auto">Daily quota is 10,000 units by default</span>
     </div>
   </div>
 
-  <p class="status" id="status"></p>
+  <p class="status" id="status" role="status" aria-live="polite" aria-atomic="true"></p>
 
   <div id="result" class="hidden">
 
@@ -292,6 +293,7 @@ footer a{color:var(--ink)}
     <textarea id="batchlist" placeholder="One name per line&#10;Dry Run&#10;Read Depth&#10;In Silico"></textarea>
     <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <button id="runBatch" class="ghost">Rank the list</button>
+      <button id="cancelBatch" class="ghost hidden" type="button">Cancel</button>
       <span class="cost" id="batchCost">Uses the mode selected above, once per name</span>
     </div>
     <div id="batchOut"></div>
@@ -304,12 +306,20 @@ footer a{color:var(--ink)}
   </footer>
 </main>
 
+<script src="specimen-core.js"></script>
 <script>
 (function(){
   "use strict";
 
+  var C = window.SpecimenCore;
+  if(!C){ console.error("SpecimenCore failed to load"); return; }
+
   var API = "https://www.googleapis.com/youtube/v3/";
   var $ = function(id){ return document.getElementById(id); };
+  var norm = C.norm, esc = C.esc, nfmt = C.nfmt;
+  var memorability = C.memorability, handleVariants = C.handleVariants;
+  var uniqueness = C.uniqueness, combinedScore = C.combinedScore;
+  var estimateUnits = C.estimateUnits, isNameValid = C.isNameValid;
 
   /* ---------- key persistence (opt-in, fails silently) ---------- */
   function store(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
@@ -326,19 +336,6 @@ footer a{color:var(--ink)}
     if($("remember").checked){ store("specimen.key", this.value.trim()); }
   });
 
-  /* ---------- helpers ---------- */
-  function norm(s){ return s.toLowerCase().replace(/[^a-z0-9]/g,""); }
-  function esc(s){
-    return String(s).replace(/[&<>"']/g, function(c){
-      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
-    });
-  }
-  function nfmt(n){
-    n = Number(n)||0;
-    if(n >= 1e6) return (n/1e6).toFixed(n>=1e7?0:1)+"M";
-    if(n >= 1e3) return (n/1e3).toFixed(n>=1e4?0:1)+"K";
-    return String(n);
-  }
   function setStatus(msg, isErr){
     var el = $("status");
     el.textContent = msg || "";
@@ -364,77 +361,6 @@ footer a{color:var(--ink)}
     });
   }
 
-  /* ---------- memorability: pure local computation ---------- */
-  function syllables(word){
-    word = word.toLowerCase().replace(/[^a-z]/g,"");
-    if(!word) return 0;
-    if(word.length <= 3) return 1;
-    word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/,"").replace(/^y/,"");
-    var m = word.match(/[aeiouy]{1,2}/g);
-    return m ? m.length : 1;
-  }
-
-  function memorability(name){
-    var reasons = [], score = 50;
-    var trimmed = name.trim();
-    var words = trimmed.split(/\s+/).filter(Boolean);
-    var letters = trimmed.replace(/[^a-zA-Z]/g,"");
-    var len = trimmed.length;
-    var syl = words.reduce(function(a,w){ return a + syllables(w); }, 0);
-
-    // length
-    if(len >= 6 && len <= 14){ score += 16; reasons.push(["plus","Short enough to sit in a search bar and a logo — "+len+" characters"]); }
-    else if(len <= 18){ score += 6; reasons.push(["flat",len+" characters. Workable, but it will wrap on mobile"]); }
-    else { score -= 16; reasons.push(["minus","At "+len+" characters this is too long to recall or type from memory"]); }
-
-    // word count
-    if(words.length === 2){ score += 14; reasons.push(["plus","Two words — the most repeatable shape for a channel name"]); }
-    else if(words.length === 1){ score += 9; reasons.push(["plus","Single word. Strong if it's ownable, risky if it's a common noun"]); }
-    else if(words.length === 3){ score -= 6; reasons.push(["minus","Three words. People will shorten it — decide now which two survive"]); }
-    else { score -= 16; reasons.push(["minus",words.length+" words is more than anyone will say out loud"]); }
-
-    // syllables
-    if(syl <= 4){ score += 12; reasons.push(["plus",syl+" syllables. Says fast, sticks fast"]); }
-    else if(syl <= 6){ score += 2; reasons.push(["flat",syl+" syllables"]); }
-    else { score -= 12; reasons.push(["minus",syl+" syllables is a mouthful on camera"]); }
-
-    // spelling hazards
-    if(/[0-9]/.test(trimmed)){ score -= 14; reasons.push(["minus","Digits force people to guess between the numeral and the word"]); }
-    if(/[_\-–—]/.test(trimmed)){ score -= 10; reasons.push(["minus","Punctuation gets dropped when the name is said aloud"]); }
-    if(/(ph|gh|kn|wr|ps|ough|ei|ie)/i.test(trimmed)){ score -= 7; reasons.push(["minus","Contains a spelling people commonly get wrong on the first try"]); }
-    if(/(.)\1\1/.test(trimmed.toLowerCase())){ score -= 8; reasons.push(["minus","Three identical letters in a row invites typos"]); }
-
-    // sound
-    var initials = words.map(function(w){ return w[0] ? w[0].toLowerCase() : ""; });
-    if(words.length >= 2 && initials[0] && initials[0] === initials[1]){
-      score += 10; reasons.push(["plus","Alliteration on \""+initials[0]+"\" — the cheapest memory hook there is"]);
-    }
-    var vowels = (letters.match(/[aeiouAEIOU]/g)||[]).length;
-    var ratio = letters.length ? vowels/letters.length : 0;
-    if(ratio < 0.22){ score -= 9; reasons.push(["minus","Very consonant-heavy, which makes it hard to say and hard to hear"]); }
-    else if(ratio > 0.62){ score -= 5; reasons.push(["flat","Vowel-heavy — check it doesn't sound vague when spoken"]); }
-    else { score += 6; reasons.push(["plus","Balanced sound. Reads cleanly when spoken aloud"]); }
-
-    // casing / clarity
-    if(/^[a-z]+$/.test(trimmed) || /^[A-Z\s]+$/.test(trimmed)){
-      reasons.push(["flat","Consider how you'll case this everywhere — pick one form and never vary it"]);
-    }
-
-    score = Math.max(0, Math.min(100, Math.round(score)));
-    return { score: score, reasons: reasons, len: len, words: words.length, syl: syl };
-  }
-
-  /* ---------- handle variants ---------- */
-  function handleVariants(name){
-    var base = norm(name);
-    var out = [base];
-    var w = name.trim().split(/\s+/).filter(Boolean);
-    if(w.length > 1) out.push(norm(w.join("")) + "hq");
-    out.push("the" + base);
-    out.push(base + "bio");
-    return out.filter(function(h,i,a){ return h && h.length >= 3 && h.length <= 30 && a.indexOf(h) === i; }).slice(0,4);
-  }
-
   function checkHandle(h, key){
     return apiGet("channels", { part:"snippet", forHandle:"@"+h }, key)
       .then(function(j){
@@ -444,7 +370,6 @@ footer a{color:var(--ink)}
       .catch(function(e){ return { handle:h, taken:null, error:e.message }; });
   }
 
-  /* ---------- rival search ---------- */
   function findRivals(name, key){
     return apiGet("search", {
       part:"snippet", type:"channel", q:name, maxResults:25
@@ -469,69 +394,24 @@ footer a{color:var(--ink)}
     });
   }
 
-  /* ---------- uniqueness scoring ---------- */
-  function uniqueness(name, rivals, handles, didSearch){
-    var reasons = [], score = 100;
-    var target = norm(name);
-
-    var takenHandles = handles.filter(function(h){ return h.taken === true; });
-    var freeHandles  = handles.filter(function(h){ return h.taken === false; });
-
-    if(takenHandles.length){
-      var pen = Math.min(24, takenHandles.length * 9);
-      score -= pen;
-      reasons.push(["minus", takenHandles.length + " of " + handles.length + " handle variants already taken (@" +
-        takenHandles.map(function(h){return h.handle;}).join(", @") + ")"]);
-    }
-    if(freeHandles.length){
-      reasons.push(["plus","@" + freeHandles[0].handle + " is free" +
-        (freeHandles.length > 1 ? " — and " + (freeHandles.length-1) + " other variant" + (freeHandles.length>2?"s":"") : "")]);
-    }
-
-    if(!didSearch){
-      reasons.push(["flat","Handle check only. Run a full scan to see who else answers to this name"]);
-      return { score: Math.max(0,Math.min(100,Math.round(score))), reasons: reasons, exact: [], near: [], searched:false };
-    }
-
-    var exact = rivals.filter(function(r){ return norm(r.title) === target; });
-    var near  = rivals.filter(function(r){
-      var n = norm(r.title);
-      return n !== target && (n.indexOf(target) !== -1 || target.indexOf(n) !== -1) && n.length > 2;
-    });
-
-    if(exact.length){
-      score -= Math.min(45, 22 + exact.length * 8);
-      reasons.push(["minus", exact.length + " channel" + (exact.length>1?"s use":" uses") + " this exact name"]);
-      var biggest = exact[0];
-      if(biggest.subs !== null && biggest.subs >= 100000){
-        score -= 22;
-        reasons.push(["minus","The largest exact match has " + nfmt(biggest.subs) + " subscribers — you will not outrank it"]);
-      } else if(biggest.subs !== null && biggest.subs >= 5000){
-        score -= 9;
-        reasons.push(["minus","The largest exact match has " + nfmt(biggest.subs) + " subscribers. Established, but beatable"]);
-      }
+  /* ---------- cost labels ---------- */
+  function updateCostLabels(){
+    var name = $("name").value.trim();
+    var sample = isNameValid(name) ? name : "Sample Name";
+    var q = estimateUnits(sample, "quick");
+    var f = estimateUnits(sample, "full");
+    $("costQuick").textContent = q + " unit" + (q === 1 ? "" : "s");
+    $("costFull").textContent = f + " unit" + (f === 1 ? "" : "s");
+    var names = $("batchlist").value.split("\n").map(function(s){ return s.trim(); }).filter(Boolean);
+    var mode = currentMode();
+    if(names.length){
+      var total = names.reduce(function(sum, n){
+        return sum + (isNameValid(n) ? estimateUnits(n, mode) : 0);
+      }, 0);
+      $("batchCost").textContent = names.length + " name" + (names.length===1?"":"s") + " · ~" + total + " units with current mode";
     } else {
-      score += 0;
-      reasons.push(["plus","No channel uses this exact name"]);
+      $("batchCost").textContent = "Uses the mode selected above, once per name";
     }
-
-    if(near.length){
-      score -= Math.min(18, near.length * 4);
-      reasons.push(["minus", near.length + " channel" + (near.length>1?"s have":" has") + " a name that contains or sits inside yours"]);
-    }
-
-    var big = rivals.filter(function(r){ return r.subs !== null && r.subs >= 500000; }).length;
-    if(big >= 3){
-      score -= 8;
-      reasons.push(["flat","This search term is dominated by large channels — expect to be outranked early on"]);
-    }
-
-    if(rivals.length <= 5){
-      score += 6;
-      reasons.push(["plus","The search term returns very few channels. Quiet territory"]);
-    }
-
-    return { score: Math.max(0,Math.min(100,Math.round(score))), reasons: reasons, exact: exact, near: near, searched:true };
   }
 
   /* ---------- render ---------- */
@@ -597,7 +477,7 @@ footer a{color:var(--ink)}
   }
 
   function verdict(u, m, didSearch){
-    var combined = didSearch ? Math.round(u*0.62 + m*0.38) : Math.round(u*0.35 + m*0.65);
+    var combined = combinedScore(u, m, didSearch);
     var word, cls, note;
     if(combined >= 72){
       word = "CLEAR"; cls = "clear";
@@ -617,6 +497,20 @@ footer a{color:var(--ink)}
     return combined;
   }
 
+  function renderBatchTable(rows, note){
+    rows = rows.slice().sort(function(a,b){ return b.total - a.total; });
+    var head = note ? '<p class="cost" style="margin:12px 0 0">'+esc(note)+'</p>' : "";
+    $("batchOut").innerHTML = head +
+      '<table class="batch"><thead><tr><th>Name</th><th>Unique</th><th>Memorable</th><th>Overall</th></tr></thead><tbody>' +
+      rows.map(function(r){
+        var sc = r.error
+          ? '<td class="sc" colspan="3" style="color:var(--collide)">'+esc(r.error)+'</td>'
+          : '<td class="sc">'+r.u+'</td><td class="sc">'+r.m+'</td>'+
+            '<td class="sc"><span class="bar" style="width:'+Math.round(r.total*0.6)+'px"></span>'+r.total+'</td>';
+        return '<tr><td class="nm">'+esc(r.name)+'</td>'+sc+'</tr>';
+      }).join("") + '</tbody></table>';
+  }
+
   /* ---------- main run ---------- */
   function currentMode(){
     var r = document.querySelector('input[name=mode]:checked');
@@ -624,8 +518,14 @@ footer a{color:var(--ink)}
   }
 
   function audition(name, key, mode){
+    if(!isNameValid(name)){
+      return Promise.reject(new Error("Use at least " + C.MIN_HANDLE_LEN + " letters or numbers in the name."));
+    }
     var target = norm(name);
     var variants = handleVariants(name);
+    if(!variants.length){
+      return Promise.reject(new Error("Could not derive any valid handle variants from that name."));
+    }
     var jobs = [ Promise.all(variants.map(function(h){ return checkHandle(h, key); })) ];
     jobs.push(mode === "full" ? findRivals(name, key) : Promise.resolve([]));
     return Promise.all(jobs).then(function(res){
@@ -637,10 +537,16 @@ footer a{color:var(--ink)}
   }
 
   $("run").addEventListener("click", function(){
+    if(this.disabled) return;
     var key = $("apikey").value.trim();
     var name = $("name").value.trim();
     if(!key){ setStatus("Add your API key above to start.", true); $("apikey").focus(); return; }
     if(!name){ setStatus("Type a name to audition.", true); $("name").focus(); return; }
+    if(!isNameValid(name)){
+      setStatus("Use at least " + C.MIN_HANDLE_LEN + " letters or numbers (punctuation alone does not count).", true);
+      $("name").focus();
+      return;
+    }
 
     var mode = currentMode();
     this.disabled = true;
@@ -667,47 +573,86 @@ footer a{color:var(--ink)}
   });
 
   $("name").addEventListener("keydown", function(e){
-    if(e.key === "Enter") $("run").click();
+    if(e.key === "Enter"){
+      if($("run").disabled) return;
+      $("run").click();
+    }
   });
+  $("name").addEventListener("input", updateCostLabels);
+  $("batchlist").addEventListener("input", updateCostLabels);
+  document.querySelectorAll('input[name=mode]').forEach(function(el){
+    el.addEventListener("change", updateCostLabels);
+  });
+  updateCostLabels();
 
   /* ---------- batch ---------- */
+  var batchState = null;
+
+  function endBatch(btn){
+    btn.disabled = false;
+    $("cancelBatch").classList.add("hidden");
+    batchState = null;
+    updateCostLabels();
+  }
+
+  $("cancelBatch").addEventListener("click", function(){
+    if(batchState) batchState.cancelled = true;
+  });
+
   $("runBatch").addEventListener("click", function(){
+    if(this.disabled) return;
     var key = $("apikey").value.trim();
     var names = $("batchlist").value.split("\n").map(function(s){ return s.trim(); }).filter(Boolean);
     if(!key){ setStatus("Add your API key above to start.", true); return; }
     if(!names.length){ setStatus("Add at least one name to the list.", true); return; }
     if(names.length > 25){ setStatus("Keep the list to 25 names or fewer so you don't burn the day's quota.", true); return; }
 
+    var invalid = names.filter(function(n){ return !isNameValid(n); });
+    if(invalid.length){
+      setStatus("Skip or fix names with fewer than " + C.MIN_HANDLE_LEN + " letters/numbers: " + invalid.slice(0,3).join(", "), true);
+      return;
+    }
+
     var mode = currentMode();
     var btn = this;
     btn.disabled = true;
+    $("cancelBatch").classList.remove("hidden");
     $("batchOut").innerHTML = "";
     setStatus("Ranking " + names.length + " names…");
 
+    batchState = { cancelled: false };
     var rows = [], i = 0;
     (function next(){
+      if(batchState && batchState.cancelled){
+        if(rows.length) renderBatchTable(rows, "Cancelled — partial results for " + rows.length + " of " + names.length);
+        setStatus("Cancelled after " + rows.length + " of " + names.length + " names.", false);
+        endBatch(btn);
+        return;
+      }
       if(i >= names.length){
-        rows.sort(function(a,b){ return b.total - a.total; });
-        $("batchOut").innerHTML =
-          '<table class="batch"><thead><tr><th>Name</th><th>Unique</th><th>Memorable</th><th>Overall</th></tr></thead><tbody>' +
-          rows.map(function(r){
-            return '<tr><td class="nm">'+esc(r.name)+'</td>'+
-              '<td class="sc">'+r.u+'</td><td class="sc">'+r.m+'</td>'+
-              '<td class="sc"><span class="bar" style="width:'+Math.round(r.total*0.6)+'px"></span>'+r.total+'</td></tr>';
-          }).join("") + '</tbody></table>';
+        renderBatchTable(rows);
         setStatus("");
-        btn.disabled = false;
+        endBatch(btn);
         return;
       }
       setStatus("Ranking " + (i+1) + " of " + names.length + " — " + names[i]);
       audition(names[i], key, mode).then(function(r){
-        var total = r.searched ? Math.round(r.u.score*0.62 + r.m.score*0.38)
-                               : Math.round(r.u.score*0.35 + r.m.score*0.65);
-        rows.push({ name:r.name, u:r.u.score, m:r.m.score, total:total });
-        i++; next();
+        rows.push({
+          name: r.name,
+          u: r.u.score,
+          m: r.m.score,
+          total: combinedScore(r.u.score, r.m.score, r.searched)
+        });
+        i++;
+        next();
       }).catch(function(e){
-        setStatus(e.message || "Stopped early.", true);
-        btn.disabled = false;
+        var msg = e.message || "Stopped early.";
+        rows.push({ name: names[i], u: "—", m: "—", total: -1, error: msg });
+        if(rows.filter(function(r){ return !r.error; }).length){
+          renderBatchTable(rows.filter(function(r){ return !r.error; }), "Stopped early — partial results shown. Failed on: " + names[i]);
+        }
+        setStatus(msg, true);
+        endBatch(btn);
       });
     })();
   });
