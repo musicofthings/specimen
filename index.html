@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Specimen — YouTube channel name checker</title>
+<meta name="description" content="Audition a YouTube channel name. Checks handle availability, counts collisions, and scores memorability. Bring your own API key.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#eef0ee;
+  --paper-2:#e4e7e4;
+  --ink:#14181c;
+  --ink-soft:#5c6660;
+  --rule:#c9cfc9;
+  --collide:#e03a2f;
+  --clear:#1b6b4a;
+  --warn:#b07d16;
+  --maxw:980px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,sans-serif;
+  font-size:16px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+
+/* ---------- masthead ---------- */
+.masthead{border-bottom:2px solid var(--ink);padding:22px 0 14px;margin-bottom:0}
+.masthead-row{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.wordmark{font-family:"Archivo Black",sans-serif;font-size:26px;letter-spacing:-.02em;line-height:1}
+.eyebrow{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-soft);
+}
+
+/* ---------- key bar ---------- */
+.keybar{border-bottom:1px solid var(--rule);padding:14px 0;background:var(--paper)}
+.keybar-inner{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.keybar label{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft)}
+input[type=text],input[type=password],textarea{
+  font-family:"IBM Plex Mono",monospace;font-size:14px;
+  background:transparent;border:1px solid var(--rule);border-radius:0;
+  padding:9px 11px;color:var(--ink);
+}
+input[type=text]:focus,input[type=password]:focus,textarea:focus{
+  outline:2px solid var(--ink);outline-offset:1px;border-color:var(--ink);
+}
+#apikey{flex:1 1 280px;min-width:0}
+.checkline{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-soft)}
+.keynote{font-size:12.5px;color:var(--ink-soft);margin-top:8px;line-height:1.5}
+.keynote a{color:var(--ink)}
+
+/* ---------- input stage ---------- */
+.stage{padding:34px 0 8px;border-bottom:1px solid var(--rule)}
+.stage-row{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch}
+#name{
+  flex:1 1 320px;min-width:0;
+  font-family:"Archivo Black",sans-serif;font-size:22px;letter-spacing:-.01em;
+  padding:12px 14px;border:2px solid var(--ink);
+}
+button{
+  font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.12em;
+  text-transform:uppercase;cursor:pointer;border:2px solid var(--ink);
+  background:var(--ink);color:var(--paper);padding:12px 20px;border-radius:0;
+}
+button:hover{background:#000}
+button:focus-visible{outline:2px solid var(--collide);outline-offset:2px}
+button[disabled]{opacity:.45;cursor:not-allowed}
+button.ghost{background:transparent;color:var(--ink)}
+button.ghost:hover{background:var(--paper-2)}
+.modes{display:flex;gap:18px;margin-top:14px;flex-wrap:wrap;font-size:13px}
+.modes label{display:flex;gap:7px;align-items:center;cursor:pointer;color:var(--ink-soft)}
+.modes input{accent-color:var(--ink)}
+.cost{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-soft);letter-spacing:.06em}
+
+/* ---------- specimen ---------- */
+.specimen{padding:44px 0 34px;border-bottom:2px solid var(--ink)}
+.spec-label{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-soft);margin-bottom:14px;
+}
+.spec-word{
+  font-family:"Archivo Black",sans-serif;
+  font-size:clamp(44px,11vw,116px);
+  line-height:.92;letter-spacing:-.035em;
+  word-break:break-word;margin:0 0 6px;
+}
+.spec-sub{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--ink-soft);margin-bottom:26px}
+
+/* collision strip — the signature */
+.strip-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px;gap:12px;flex-wrap:wrap}
+.strip-head span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft)}
+.strip{
+  display:flex;align-items:flex-end;gap:3px;height:64px;
+  border-bottom:2px solid var(--ink);padding-bottom:0;
+}
+.tick{
+  flex:0 0 9px;background:var(--ink-soft);
+  transform-origin:bottom;
+}
+.tick.hit{background:var(--collide)}
+.strip-empty{
+  height:64px;border-bottom:2px solid var(--ink);
+  display:flex;align-items:flex-end;padding-bottom:8px;
+  font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--clear);
+}
+@media (prefers-reduced-motion:no-preference){
+  .tick{animation:grow .34s cubic-bezier(.2,.8,.3,1) backwards}
+  @keyframes grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+}
+
+/* ---------- verdict ---------- */
+.verdict{display:flex;align-items:baseline;gap:14px;margin-top:26px;flex-wrap:wrap}
+.verdict-word{font-family:"Archivo Black",sans-serif;font-size:30px;letter-spacing:-.02em}
+.verdict-word.clear{color:var(--clear)}
+.verdict-word.crowded{color:var(--collide)}
+.verdict-word.tight{color:var(--warn)}
+.verdict-note{font-size:14.5px;color:var(--ink-soft);flex:1 1 240px}
+
+/* ---------- scores ---------- */
+.scores{display:grid;grid-template-columns:1fr 1fr;gap:0;border-bottom:1px solid var(--rule)}
+.score{padding:28px 26px 26px 0}
+.score+.score{border-left:1px solid var(--rule);padding-left:26px;padding-right:0}
+.score h3{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-soft);margin:0 0 10px;font-weight:500;
+}
+.score-num{font-family:"Archivo Black",sans-serif;font-size:52px;line-height:1;letter-spacing:-.03em}
+.score-num small{font-size:17px;color:var(--ink-soft);letter-spacing:0}
+.reasons{list-style:none;margin:16px 0 0;padding:0;font-size:14px}
+.reasons li{padding:4px 0 4px 20px;position:relative;color:var(--ink-soft);line-height:1.45}
+.reasons li::before{position:absolute;left:0;font-family:"IBM Plex Mono",monospace;font-size:13px}
+.reasons li.plus::before{content:"+";color:var(--clear)}
+.reasons li.minus::before{content:"−";color:var(--collide)}
+.reasons li.flat::before{content:"·";color:var(--ink-soft)}
+
+/* ---------- sections ---------- */
+section.block{padding:28px 0;border-bottom:1px solid var(--rule)}
+section.block h2{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-soft);margin:0 0 16px;font-weight:500;
+}
+.handles{display:flex;flex-direction:column;gap:0}
+.handle{
+  display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:11px 0;border-top:1px solid var(--rule);font-family:"IBM Plex Mono",monospace;font-size:14px;
+}
+.handle:first-child{border-top:none}
+.tag{font-size:11px;letter-spacing:.12em;text-transform:uppercase;padding:3px 8px;white-space:nowrap}
+.tag.free{background:var(--clear);color:var(--paper)}
+.tag.taken{background:var(--collide);color:var(--paper)}
+.tag.unknown{background:var(--paper-2);color:var(--ink-soft)}
+
+.rivals{list-style:none;margin:0;padding:0}
+.rival{display:flex;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--rule)}
+.rival:first-child{border-top:none}
+.rival img{width:38px;height:38px;flex:0 0 38px;background:var(--paper-2);border-radius:50%}
+.rival-body{flex:1 1 auto;min-width:0}
+.rival-name{font-weight:600;font-size:15px;line-height:1.3}
+.rival-name a{color:inherit;text-decoration:none;border-bottom:1px solid var(--rule)}
+.rival-name a:hover{border-bottom-color:var(--ink)}
+.rival-name.exact{color:var(--collide)}
+.rival-meta{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft);margin-top:2px}
+
+/* ---------- batch ---------- */
+#batchlist{width:100%;min-height:110px;resize:vertical;font-size:14px;line-height:1.6}
+table.batch{width:100%;border-collapse:collapse;margin-top:18px;font-size:14px}
+table.batch th{
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--ink-soft);text-align:left;font-weight:500;padding:0 10px 8px 0;border-bottom:2px solid var(--ink);
+}
+table.batch th:last-child,table.batch td:last-child{text-align:right;padding-right:0}
+table.batch td{padding:11px 10px 11px 0;border-bottom:1px solid var(--rule);vertical-align:middle}
+table.batch td.nm{font-family:"Archivo Black",sans-serif;font-size:16px;letter-spacing:-.01em}
+table.batch td.sc{font-family:"IBM Plex Mono",monospace;font-size:15px}
+.bar{display:inline-block;height:8px;background:var(--ink);vertical-align:middle;margin-right:8px}
+
+/* ---------- misc ---------- */
+.status{
+  font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--ink-soft);
+  padding:14px 0;min-height:20px;
+}
+.status.err{color:var(--collide)}
+.hidden{display:none!important}
+footer{padding:30px 0 60px;font-size:13px;color:var(--ink-soft);line-height:1.6}
+footer a{color:var(--ink)}
+.legend{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-soft);letter-spacing:.06em;margin-top:8px}
+
+@media (max-width:640px){
+  .scores{grid-template-columns:1fr}
+  .score{padding:22px 0}
+  .score+.score{border-left:none;border-top:1px solid var(--rule);padding-left:0}
+  .wrap{padding:0 18px}
+}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap masthead-row">
+    <div class="wordmark">SPECIMEN</div>
+    <div class="eyebrow">YouTube channel name check · bring your own key</div>
+  </div>
+</header>
+
+<div class="keybar">
+  <div class="wrap">
+    <div class="keybar-inner">
+      <label for="apikey">API key</label>
+      <input type="password" id="apikey" placeholder="AIza…" autocomplete="off" spellcheck="false">
+      <span class="checkline"><input type="checkbox" id="remember"><label for="remember" style="text-transform:none;letter-spacing:0;font-family:inherit;font-size:13px">Remember in this browser</label></span>
+    </div>
+    <p class="keynote">
+      Your key stays in your browser and goes straight to Google. Nothing is sent anywhere else — this page has no backend.
+      Get a key from the <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">Google Cloud console</a>
+      by enabling the YouTube Data API v3. Restrict it to your site's referrer before you use it anywhere public.
+    </p>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <div class="stage">
+    <div class="stage-row">
+      <input type="text" id="name" placeholder="Type a channel name" autocomplete="off" spellcheck="false">
+      <button id="run">Audition</button>
+    </div>
+    <div class="modes">
+      <label><input type="radio" name="mode" value="quick" checked> Handles only <span class="cost">3 units</span></label>
+      <label><input type="radio" name="mode" value="full"> Full scan, finds rival channels <span class="cost">104 units</span></label>
+      <span class="cost" id="quota" style="margin-left:auto">Daily quota is 10,000 units by default</span>
+    </div>
+  </div>
+
+  <p class="status" id="status"></p>
+
+  <div id="result" class="hidden">
+
+    <div class="specimen">
+      <div class="spec-label">Specimen</div>
+      <h1 class="spec-word" id="specWord">—</h1>
+      <div class="spec-sub" id="specSub"></div>
+
+      <div class="strip-head">
+        <span>Collision strip</span>
+        <span id="stripCount"></span>
+      </div>
+      <div id="stripHost"></div>
+      <div class="legend">Each tick is a channel already using this name or something close. Height scales with subscriber count; red means an exact title match.</div>
+
+      <div class="verdict">
+        <div class="verdict-word" id="verdictWord">—</div>
+        <div class="verdict-note" id="verdictNote"></div>
+      </div>
+    </div>
+
+    <div class="scores">
+      <div class="score">
+        <h3>Uniqueness</h3>
+        <div class="score-num" id="uScore">—<small>/100</small></div>
+        <ul class="reasons" id="uReasons"></ul>
+      </div>
+      <div class="score">
+        <h3>Memorability</h3>
+        <div class="score-num" id="mScore">—<small>/100</small></div>
+        <ul class="reasons" id="mReasons"></ul>
+      </div>
+    </div>
+
+    <section class="block">
+      <h2>Handle availability</h2>
+      <div class="handles" id="handles"></div>
+    </section>
+
+    <section class="block" id="rivalsBlock">
+      <h2>Channels already using this</h2>
+      <ul class="rivals" id="rivals"></ul>
+    </section>
+  </div>
+
+  <section class="block">
+    <h2>Compare a shortlist</h2>
+    <textarea id="batchlist" placeholder="One name per line&#10;Dry Run&#10;Read Depth&#10;In Silico"></textarea>
+    <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button id="runBatch" class="ghost">Rank the list</button>
+      <span class="cost" id="batchCost">Uses the mode selected above, once per name</span>
+    </div>
+    <div id="batchOut"></div>
+  </section>
+
+  <footer>
+    <p><strong>What the scores mean.</strong> Uniqueness counts how many channels already answer to this name and how big they are — an exact match with a large audience is what actually buries you in search. Memorability is computed from the name itself: length, word count, syllables, sound repetition, and how many ways it can be misspelled. It never touches the network.</p>
+    <p>Handle checks cost 1 unit each and are usually enough to kill a bad candidate early. Run the full scan only on names that survive.</p>
+    <p>MIT licensed. Fork it, change the weights, open a pull request.</p>
+  </footer>
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  var API = "https://www.googleapis.com/youtube/v3/";
+  var $ = function(id){ return document.getElementById(id); };
+
+  /* ---------- key persistence (opt-in, fails silently) ---------- */
+  function store(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+  function load(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  function drop(k){ try{ localStorage.removeItem(k); }catch(e){} }
+
+  var saved = load("specimen.key");
+  if(saved){ $("apikey").value = saved; $("remember").checked = true; }
+  $("remember").addEventListener("change", function(){
+    if(this.checked){ store("specimen.key", $("apikey").value.trim()); }
+    else { drop("specimen.key"); }
+  });
+  $("apikey").addEventListener("input", function(){
+    if($("remember").checked){ store("specimen.key", this.value.trim()); }
+  });
+
+  /* ---------- helpers ---------- */
+  function norm(s){ return s.toLowerCase().replace(/[^a-z0-9]/g,""); }
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+  function nfmt(n){
+    n = Number(n)||0;
+    if(n >= 1e6) return (n/1e6).toFixed(n>=1e7?0:1)+"M";
+    if(n >= 1e3) return (n/1e3).toFixed(n>=1e4?0:1)+"K";
+    return String(n);
+  }
+  function setStatus(msg, isErr){
+    var el = $("status");
+    el.textContent = msg || "";
+    el.className = "status" + (isErr ? " err" : "");
+  }
+
+  function apiGet(path, params, key){
+    params.key = key;
+    var qs = Object.keys(params).map(function(k){
+      return encodeURIComponent(k)+"="+encodeURIComponent(params[k]);
+    }).join("&");
+    return fetch(API+path+"?"+qs).then(function(r){
+      return r.json().then(function(j){
+        if(!r.ok){
+          var m = (j && j.error && j.error.message) || ("HTTP "+r.status);
+          if(r.status === 403 && /quota/i.test(m)) m = "Daily quota exhausted. It resets at midnight Pacific.";
+          else if(r.status === 400) m = "Google rejected the key. Check it's valid and that YouTube Data API v3 is enabled.";
+          else if(r.status === 403) m = "Key refused: " + m;
+          throw new Error(m);
+        }
+        return j;
+      });
+    });
+  }
+
+  /* ---------- memorability: pure local computation ---------- */
+  function syllables(word){
+    word = word.toLowerCase().replace(/[^a-z]/g,"");
+    if(!word) return 0;
+    if(word.length <= 3) return 1;
+    word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/,"").replace(/^y/,"");
+    var m = word.match(/[aeiouy]{1,2}/g);
+    return m ? m.length : 1;
+  }
+
+  function memorability(name){
+    var reasons = [], score = 50;
+    var trimmed = name.trim();
+    var words = trimmed.split(/\s+/).filter(Boolean);
+    var letters = trimmed.replace(/[^a-zA-Z]/g,"");
+    var len = trimmed.length;
+    var syl = words.reduce(function(a,w){ return a + syllables(w); }, 0);
+
+    // length
+    if(len >= 6 && len <= 14){ score += 16; reasons.push(["plus","Short enough to sit in a search bar and a logo — "+len+" characters"]); }
+    else if(len <= 18){ score += 6; reasons.push(["flat",len+" characters. Workable, but it will wrap on mobile"]); }
+    else { score -= 16; reasons.push(["minus","At "+len+" characters this is too long to recall or type from memory"]); }
+
+    // word count
+    if(words.length === 2){ score += 14; reasons.push(["plus","Two words — the most repeatable shape for a channel name"]); }
+    else if(words.length === 1){ score += 9; reasons.push(["plus","Single word. Strong if it's ownable, risky if it's a common noun"]); }
+    else if(words.length === 3){ score -= 6; reasons.push(["minus","Three words. People will shorten it — decide now which two survive"]); }
+    else { score -= 16; reasons.push(["minus",words.length+" words is more than anyone will say out loud"]); }
+
+    // syllables
+    if(syl <= 4){ score += 12; reasons.push(["plus",syl+" syllables. Says fast, sticks fast"]); }
+    else if(syl <= 6){ score += 2; reasons.push(["flat",syl+" syllables"]); }
+    else { score -= 12; reasons.push(["minus",syl+" syllables is a mouthful on camera"]); }
+
+    // spelling hazards
+    if(/[0-9]/.test(trimmed)){ score -= 14; reasons.push(["minus","Digits force people to guess between the numeral and the word"]); }
+    if(/[_\-–—]/.test(trimmed)){ score -= 10; reasons.push(["minus","Punctuation gets dropped when the name is said aloud"]); }
+    if(/(ph|gh|kn|wr|ps|ough|ei|ie)/i.test(trimmed)){ score -= 7; reasons.push(["minus","Contains a spelling people commonly get wrong on the first try"]); }
+    if(/(.)\1\1/.test(trimmed.toLowerCase())){ score -= 8; reasons.push(["minus","Three identical letters in a row invites typos"]); }
+
+    // sound
+    var initials = words.map(function(w){ return w[0] ? w[0].toLowerCase() : ""; });
+    if(words.length >= 2 && initials[0] && initials[0] === initials[1]){
+      score += 10; reasons.push(["plus","Alliteration on \""+initials[0]+"\" — the cheapest memory hook there is"]);
+    }
+    var vowels = (letters.match(/[aeiouAEIOU]/g)||[]).length;
+    var ratio = letters.length ? vowels/letters.length : 0;
+    if(ratio < 0.22){ score -= 9; reasons.push(["minus","Very consonant-heavy, which makes it hard to say and hard to hear"]); }
+    else if(ratio > 0.62){ score -= 5; reasons.push(["flat","Vowel-heavy — check it doesn't sound vague when spoken"]); }
+    else { score += 6; reasons.push(["plus","Balanced sound. Reads cleanly when spoken aloud"]); }
+
+    // casing / clarity
+    if(/^[a-z]+$/.test(trimmed) || /^[A-Z\s]+$/.test(trimmed)){
+      reasons.push(["flat","Consider how you'll case this everywhere — pick one form and never vary it"]);
+    }
+
+    score = Math.max(0, Math.min(100, Math.round(score)));
+    return { score: score, reasons: reasons, len: len, words: words.length, syl: syl };
+  }
+
+  /* ---------- handle variants ---------- */
+  function handleVariants(name){
+    var base = norm(name);
+    var out = [base];
+    var w = name.trim().split(/\s+/).filter(Boolean);
+    if(w.length > 1) out.push(norm(w.join("")) + "hq");
+    out.push("the" + base);
+    out.push(base + "bio");
+    return out.filter(function(h,i,a){ return h && h.length >= 3 && h.length <= 30 && a.indexOf(h) === i; }).slice(0,4);
+  }
+
+  function checkHandle(h, key){
+    return apiGet("channels", { part:"snippet", forHandle:"@"+h }, key)
+      .then(function(j){
+        var taken = !!(j.items && j.items.length);
+        return { handle:h, taken:taken, title: taken ? j.items[0].snippet.title : null };
+      })
+      .catch(function(e){ return { handle:h, taken:null, error:e.message }; });
+  }
+
+  /* ---------- rival search ---------- */
+  function findRivals(name, key){
+    return apiGet("search", {
+      part:"snippet", type:"channel", q:name, maxResults:25
+    }, key).then(function(j){
+      var ids = (j.items||[]).map(function(it){
+        return (it.id && it.id.channelId) || it.snippet.channelId;
+      }).filter(Boolean);
+      if(!ids.length) return [];
+      return apiGet("channels", {
+        part:"snippet,statistics", id: ids.slice(0,50).join(",")
+      }, key).then(function(c){
+        return (c.items||[]).map(function(it){
+          return {
+            id: it.id,
+            title: it.snippet.title,
+            handle: it.snippet.customUrl || "",
+            subs: it.statistics && it.statistics.hiddenSubscriberCount ? null : Number((it.statistics||{}).subscriberCount||0),
+            thumb: ((it.snippet.thumbnails||{}).default||{}).url || ""
+          };
+        }).sort(function(a,b){ return (b.subs||0) - (a.subs||0); });
+      });
+    });
+  }
+
+  /* ---------- uniqueness scoring ---------- */
+  function uniqueness(name, rivals, handles, didSearch){
+    var reasons = [], score = 100;
+    var target = norm(name);
+
+    var takenHandles = handles.filter(function(h){ return h.taken === true; });
+    var freeHandles  = handles.filter(function(h){ return h.taken === false; });
+
+    if(takenHandles.length){
+      var pen = Math.min(24, takenHandles.length * 9);
+      score -= pen;
+      reasons.push(["minus", takenHandles.length + " of " + handles.length + " handle variants already taken (@" +
+        takenHandles.map(function(h){return h.handle;}).join(", @") + ")"]);
+    }
+    if(freeHandles.length){
+      reasons.push(["plus","@" + freeHandles[0].handle + " is free" +
+        (freeHandles.length > 1 ? " — and " + (freeHandles.length-1) + " other variant" + (freeHandles.length>2?"s":"") : "")]);
+    }
+
+    if(!didSearch){
+      reasons.push(["flat","Handle check only. Run a full scan to see who else answers to this name"]);
+      return { score: Math.max(0,Math.min(100,Math.round(score))), reasons: reasons, exact: [], near: [], searched:false };
+    }
+
+    var exact = rivals.filter(function(r){ return norm(r.title) === target; });
+    var near  = rivals.filter(function(r){
+      var n = norm(r.title);
+      return n !== target && (n.indexOf(target) !== -1 || target.indexOf(n) !== -1) && n.length > 2;
+    });
+
+    if(exact.length){
+      score -= Math.min(45, 22 + exact.length * 8);
+      reasons.push(["minus", exact.length + " channel" + (exact.length>1?"s use":" uses") + " this exact name"]);
+      var biggest = exact[0];
+      if(biggest.subs !== null && biggest.subs >= 100000){
+        score -= 22;
+        reasons.push(["minus","The largest exact match has " + nfmt(biggest.subs) + " subscribers — you will not outrank it"]);
+      } else if(biggest.subs !== null && biggest.subs >= 5000){
+        score -= 9;
+        reasons.push(["minus","The largest exact match has " + nfmt(biggest.subs) + " subscribers. Established, but beatable"]);
+      }
+    } else {
+      score += 0;
+      reasons.push(["plus","No channel uses this exact name"]);
+    }
+
+    if(near.length){
+      score -= Math.min(18, near.length * 4);
+      reasons.push(["minus", near.length + " channel" + (near.length>1?"s have":" has") + " a name that contains or sits inside yours"]);
+    }
+
+    var big = rivals.filter(function(r){ return r.subs !== null && r.subs >= 500000; }).length;
+    if(big >= 3){
+      score -= 8;
+      reasons.push(["flat","This search term is dominated by large channels — expect to be outranked early on"]);
+    }
+
+    if(rivals.length <= 5){
+      score += 6;
+      reasons.push(["plus","The search term returns very few channels. Quiet territory"]);
+    }
+
+    return { score: Math.max(0,Math.min(100,Math.round(score))), reasons: reasons, exact: exact, near: near, searched:true };
+  }
+
+  /* ---------- render ---------- */
+  function renderReasons(el, list){
+    el.innerHTML = list.map(function(r){
+      return '<li class="'+r[0]+'">'+esc(r[1])+'</li>';
+    }).join("");
+  }
+
+  function renderStrip(rivals, target, didSearch){
+    var host = $("stripHost");
+    if(!didSearch){
+      host.innerHTML = '<div class="strip-empty">Not scanned — run a full scan to draw this</div>';
+      $("stripCount").textContent = "";
+      return;
+    }
+    if(!rivals.length){
+      host.innerHTML = '<div class="strip-empty">No competing channels found</div>';
+      $("stripCount").textContent = "0 found";
+      return;
+    }
+    var max = Math.max.apply(null, rivals.map(function(r){ return Math.log10((r.subs||0)+10); }));
+    var html = rivals.slice(0,40).map(function(r,i){
+      var h = Math.max(6, Math.round((Math.log10((r.subs||0)+10)/max) * 62));
+      var hit = norm(r.title) === target ? " hit" : "";
+      var title = r.title + (r.subs === null ? " · subscribers hidden" : " · " + nfmt(r.subs) + " subs");
+      return '<div class="tick'+hit+'" style="height:'+h+'px;animation-delay:'+(i*14)+'ms" title="'+esc(title)+'"></div>';
+    }).join("");
+    host.innerHTML = '<div class="strip">'+html+'</div>';
+    $("stripCount").textContent = rivals.length + " channel" + (rivals.length===1?"":"s") + " found";
+  }
+
+  function renderHandles(handles){
+    $("handles").innerHTML = handles.map(function(h){
+      var tag = h.taken === true
+        ? '<span class="tag taken">Taken</span>'
+        : h.taken === false
+          ? '<span class="tag free">Free</span>'
+          : '<span class="tag unknown">Unknown</span>';
+      var who = h.taken === true && h.title ? '<span style="color:var(--ink-soft)">'+esc(h.title)+'</span>' : "";
+      return '<div class="handle"><span>@'+esc(h.handle)+'</span><span style="display:flex;gap:12px;align-items:center">'+who+tag+'</span></div>';
+    }).join("");
+  }
+
+  function renderRivals(rivals, target, didSearch){
+    var block = $("rivalsBlock");
+    if(!didSearch){ block.classList.add("hidden"); return; }
+    block.classList.remove("hidden");
+    if(!rivals.length){
+      $("rivals").innerHTML = '<li class="rival"><div class="rival-body"><div class="rival-meta">Nothing came back. That is a good sign, and rare.</div></div></li>';
+      return;
+    }
+    $("rivals").innerHTML = rivals.slice(0,15).map(function(r){
+      var isExact = norm(r.title) === target;
+      var url = r.handle ? "https://www.youtube.com/"+r.handle : "https://www.youtube.com/channel/"+r.id;
+      return '<li class="rival">'+
+        (r.thumb ? '<img src="'+esc(r.thumb)+'" alt="" loading="lazy">' : '<img alt="">')+
+        '<div class="rival-body">'+
+          '<div class="rival-name'+(isExact?' exact':'')+'"><a href="'+esc(url)+'" target="_blank" rel="noopener">'+esc(r.title)+'</a></div>'+
+          '<div class="rival-meta">'+(r.subs===null?"subscribers hidden":nfmt(r.subs)+" subscribers")+(r.handle?" · "+esc(r.handle):"")+(isExact?" · exact match":"")+'</div>'+
+        '</div></li>';
+    }).join("");
+  }
+
+  function verdict(u, m, didSearch){
+    var combined = didSearch ? Math.round(u*0.62 + m*0.38) : Math.round(u*0.35 + m*0.65);
+    var word, cls, note;
+    if(combined >= 72){
+      word = "CLEAR"; cls = "clear";
+      note = didSearch
+        ? "Nobody meaningful owns this and it holds up as a spoken name. Secure the handle today."
+        : "The name itself is strong and the handles are open. Run a full scan before you commit.";
+    } else if(combined >= 52){
+      word = "TIGHT"; cls = "tight";
+      note = "Usable, but you'll be doing extra work to be found. Worth testing two or three alternatives beside it.";
+    } else {
+      word = "CROWDED"; cls = "crowded";
+      note = "You would be building on top of someone else's search results. Keep looking.";
+    }
+    $("verdictWord").textContent = word;
+    $("verdictWord").className = "verdict-word " + cls;
+    $("verdictNote").textContent = note;
+    return combined;
+  }
+
+  /* ---------- main run ---------- */
+  function currentMode(){
+    var r = document.querySelector('input[name=mode]:checked');
+    return r ? r.value : "quick";
+  }
+
+  function audition(name, key, mode){
+    var target = norm(name);
+    var variants = handleVariants(name);
+    var jobs = [ Promise.all(variants.map(function(h){ return checkHandle(h, key); })) ];
+    jobs.push(mode === "full" ? findRivals(name, key) : Promise.resolve([]));
+    return Promise.all(jobs).then(function(res){
+      var handles = res[0], rivals = res[1];
+      var m = memorability(name);
+      var u = uniqueness(name, rivals, handles, mode === "full");
+      return { name:name, target:target, handles:handles, rivals:rivals, m:m, u:u, searched: mode === "full" };
+    });
+  }
+
+  $("run").addEventListener("click", function(){
+    var key = $("apikey").value.trim();
+    var name = $("name").value.trim();
+    if(!key){ setStatus("Add your API key above to start.", true); $("apikey").focus(); return; }
+    if(!name){ setStatus("Type a name to audition.", true); $("name").focus(); return; }
+
+    var mode = currentMode();
+    this.disabled = true;
+    setStatus("Checking…");
+
+    audition(name, key, mode).then(function(r){
+      $("specWord").textContent = r.name;
+      $("specSub").textContent = r.m.len + " characters · " + r.m.words + " word" + (r.m.words===1?"":"s") + " · " + r.m.syl + " syllables";
+      renderStrip(r.rivals, r.target, r.searched);
+      $("uScore").innerHTML = r.u.score + '<small>/100</small>';
+      $("mScore").innerHTML = r.m.score + '<small>/100</small>';
+      renderReasons($("uReasons"), r.u.reasons);
+      renderReasons($("mReasons"), r.m.reasons);
+      renderHandles(r.handles);
+      renderRivals(r.rivals, r.target, r.searched);
+      verdict(r.u.score, r.m.score, r.searched);
+      $("result").classList.remove("hidden");
+      setStatus("");
+    }).catch(function(e){
+      setStatus(e.message || "Something went wrong.", true);
+    }).then(function(){
+      $("run").disabled = false;
+    });
+  });
+
+  $("name").addEventListener("keydown", function(e){
+    if(e.key === "Enter") $("run").click();
+  });
+
+  /* ---------- batch ---------- */
+  $("runBatch").addEventListener("click", function(){
+    var key = $("apikey").value.trim();
+    var names = $("batchlist").value.split("\n").map(function(s){ return s.trim(); }).filter(Boolean);
+    if(!key){ setStatus("Add your API key above to start.", true); return; }
+    if(!names.length){ setStatus("Add at least one name to the list.", true); return; }
+    if(names.length > 25){ setStatus("Keep the list to 25 names or fewer so you don't burn the day's quota.", true); return; }
+
+    var mode = currentMode();
+    var btn = this;
+    btn.disabled = true;
+    $("batchOut").innerHTML = "";
+    setStatus("Ranking " + names.length + " names…");
+
+    var rows = [], i = 0;
+    (function next(){
+      if(i >= names.length){
+        rows.sort(function(a,b){ return b.total - a.total; });
+        $("batchOut").innerHTML =
+          '<table class="batch"><thead><tr><th>Name</th><th>Unique</th><th>Memorable</th><th>Overall</th></tr></thead><tbody>' +
+          rows.map(function(r){
+            return '<tr><td class="nm">'+esc(r.name)+'</td>'+
+              '<td class="sc">'+r.u+'</td><td class="sc">'+r.m+'</td>'+
+              '<td class="sc"><span class="bar" style="width:'+Math.round(r.total*0.6)+'px"></span>'+r.total+'</td></tr>';
+          }).join("") + '</tbody></table>';
+        setStatus("");
+        btn.disabled = false;
+        return;
+      }
+      setStatus("Ranking " + (i+1) + " of " + names.length + " — " + names[i]);
+      audition(names[i], key, mode).then(function(r){
+        var total = r.searched ? Math.round(r.u.score*0.62 + r.m.score*0.38)
+                               : Math.round(r.u.score*0.35 + r.m.score*0.65);
+        rows.push({ name:r.name, u:r.u.score, m:r.m.score, total:total });
+        i++; next();
+      }).catch(function(e){
+        setStatus(e.message || "Stopped early.", true);
+        btn.disabled = false;
+      });
+    })();
+  });
+
+})();
+</script>
+</body>
+</html>
