@@ -25,33 +25,105 @@ No packages to install. The suite covers normalization, handle variants, quota e
 
 ---
 
-## Getting an API key
+## Set up a Google Cloud API key
 
-1. Open the [Google Cloud console](https://console.cloud.google.com/) and create a project.
-2. Enable **YouTube Data API v3** under APIs & Services → Library.
-3. Credentials → Create credentials → API key.
-4. **Restrict it.** Click the key, set *Application restrictions* to **Websites**, then set *API restrictions* to YouTube Data API v3 only.
+Specimen talks to Google from your browser. You need a **YouTube Data API v3** key. There is no paid setup for light personal use — the default free quota is 10,000 units per day.
 
-### Website restriction patterns (important)
+### 1. Create a Google Cloud project
 
-Browsers send only the **origin** as `Referer` on cross-origin calls to `googleapis.com` (not the `/specimen/` path). So these are the patterns that work for GitHub Pages:
+1. Open the [Google Cloud Console](https://console.cloud.google.com/).
+2. Sign in with a Google account.
+3. Click the project picker at the top of the page → **New Project**.
+4. Name it something like `specimen` → **Create**.
+5. Make sure that project is selected in the project picker before continuing.
 
-| Environment | Add this website restriction |
+### 2. Enable YouTube Data API v3
+
+1. Go to **APIs & Services → Library**  
+   (or open [this link](https://console.cloud.google.com/apis/library/youtube.googleapis.com)).
+2. Search for **YouTube Data API v3**.
+3. Open it and click **Enable**.
+4. Wait until the console shows the API as enabled for your project.
+
+Without this step, every request fails even with a valid-looking key.
+
+### 3. Create an API key
+
+1. Go to **APIs & Services → Credentials**  
+   (or [open Credentials](https://console.cloud.google.com/apis/credentials)).
+2. Click **+ Create credentials → API key**.
+3. Copy the key when the dialog appears. You can paste it into Specimen immediately for a quick test.
+
+Keep the key private. Anyone who has it can spend your daily quota.
+
+### 4. Restrict the key (do this before sharing the site)
+
+Still on **Credentials**, click the key you just created (or the pencil edit icon).
+
+#### Application restrictions (who can use the key)
+
+1. Under **Application restrictions**, choose **HTTP referrers (web sites)**.
+2. Under **Website restrictions**, click **Add an item** and add the patterns for where you run Specimen:
+
+| Where you open Specimen | Website restriction to add |
 |---|---|
-| GitHub Pages (user/org or project site) | `https://<your-username>.github.io/*` |
-| Local static server | `http://localhost/*` and `http://127.0.0.1/*` |
+| GitHub Pages | `https://<your-username>.github.io/*` |
+| This project’s live site | `https://musicofthings.github.io/*` |
+| Local server (any port) | `http://localhost/*` **and** `http://127.0.0.1/*` |
 
-For this project that means at minimum:
+Example for this repo on GitHub Pages:
 
 ```text
 https://musicofthings.github.io/*
 ```
 
-**Do not rely only on** `https://musicofthings.github.io/specimen/*` — the Referer Google sees is usually `https://musicofthings.github.io/`, which does not match a `/specimen/*` rule, and you get *Requests from referer … are blocked*.
+**Why `/*` on the origin, not `/specimen/*` only**
 
-After saving restrictions, wait one to five minutes, then hard-refresh the page. If it still fails, temporarily set Application restrictions to **None**, confirm the key works, then re-add the origin pattern above.
+Browsers call `googleapis.com` cross-origin. They usually send only the **site origin** as the `Referer` (for example `https://musicofthings.github.io/`), **not** the full path `/specimen/`.
 
-Step 4 matters. An unrestricted key in a browser can be lifted from your network tab and spent by someone else.
+| Pattern | Works? |
+|---|---|
+| `https://musicofthings.github.io/*` | Yes |
+| `https://musicofthings.github.io/specimen/*` alone | No — origin-only referrer does not match |
+| `https://musicofthings.github.io` without `/*` | Often fails |
+
+If you see *Requests from referer https://…github.io/ are blocked*, your allowlist is wrong or still propagating. Fix the pattern above, save, wait a few minutes, hard-refresh.
+
+#### API restrictions (what the key can call)
+
+1. Under **API restrictions**, choose **Restrict key**.
+2. Select **YouTube Data API v3** only.
+3. Click **Save**.
+
+Restrictions can take **1–5 minutes** to apply. If a change seems ignored, wait and hard-refresh (`Cmd+Shift+R` / `Ctrl+Shift+R`).
+
+### 5. Use the key in Specimen
+
+1. Open the deployed page (or a local server — do not rely on opening `index.html` as a `file://` URL if the key is referrer-restricted).
+2. Paste the key into the **API key** field at the top.
+3. Optionally check **Remember in this browser** (stored only in your browser’s `localStorage`).
+4. Type a name → choose **Handles only** or **Full scan** → **Audition**.
+
+The page shows the recommended origin pattern (e.g. `https://musicofthings.github.io/*`) next to the key field so you can copy it into Google Cloud.
+
+### 6. Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| *Requests from referer … are blocked* | Website restriction does not match the origin | Add `https://<user>.github.io/*` (not only `/specimen/*`). Save; wait 1–5 min. |
+| *Key refused* / 403 | API not enabled, or API restriction too tight | Enable YouTube Data API v3; restrict the key to that API (or “Don’t restrict” while debugging). |
+| *API key not valid* / 400 | Wrong key or wrong project | Create the key in the **same** project where the API is enabled; paste the full key. |
+| All handles show **Unknown** | Same as above — API error | Read the red status line; it now surfaces the real Google error. |
+| Works with restrictions **None**, fails when restricted | Referrer pattern mismatch | Use the origin + `/*` pattern from the table above. |
+| Opened as `file://…/index.html` | No normal HTTP origin/referrer | Serve via GitHub Pages or `npx serve` / any local static server. |
+
+**Debug tip:** temporarily set Application restrictions to **None**, confirm Audition works, then put website restrictions back. That separates “bad key / API off” from “referrer pattern wrong.”
+
+### Security notes
+
+- Prefer a restricted key before you leave the tool on a public URL.
+- An unrestricted browser key can be copied from DevTools and used by others against your quota.
+- Specimen does not send the key to any server of its own — only to Google’s YouTube API.
 
 ---
 
