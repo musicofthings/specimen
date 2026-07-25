@@ -234,7 +234,7 @@ footer a{color:var(--ink)}
     <p class="keynote">
       Your key stays in your browser and goes straight to Google. Nothing is sent anywhere else — this page has no backend.
       Get a key from the <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">Google Cloud console</a>
-      by enabling the YouTube Data API v3. Restrict it to your site's referrer before you use it anywhere public.
+      by enabling the YouTube Data API v3. For website restrictions, allow <strong id="originHint">this origin with /*</strong> — browsers only send the origin (not /specimen/) to Google on API calls.
     </p>
   </div>
 </div>
@@ -338,6 +338,11 @@ footer a{color:var(--ink)}
   function load(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
   function drop(k){ try{ localStorage.removeItem(k); }catch(e){} }
 
+  var originHint = $("originHint");
+  if(originHint && location.origin){
+    originHint.textContent = location.origin + "/*";
+  }
+
   var saved = load("specimen.key");
   if(saved){ $("apikey").value = saved; $("remember").checked = true; }
   $("remember").addEventListener("change", function(){
@@ -364,8 +369,12 @@ footer a{color:var(--ink)}
     if(status === 403 && /quota|dailyLimitExceeded|userRateLimitExceeded/i.test(m + " " + joined)){
       return "Daily quota exhausted. It resets at midnight Pacific.";
     }
-    if(status === 403 && /referer|referrer|ipRefererBlocked|API_KEY_HTTP_REFERRER_BLOCKED/i.test(m + " " + joined + " " + reason)){
-      return "API key blocked by HTTP referrer restriction. In Google Cloud → Credentials → your key, add this site's origin (e.g. http://localhost:PORT/* or https://YOURUSER.github.io/*), or temporarily set Application restrictions to None while testing.";
+    if(status === 403 && /referer|referrer|ipRefererBlocked|API_KEY_HTTP_REFERRER_BLOCKED|are blocked/i.test(m + " " + joined + " " + reason)){
+      var origin = (typeof location !== "undefined" && location.origin) ? location.origin : "https://YOURUSER.github.io";
+      // Cross-origin calls to googleapis.com only send the *origin* as Referer
+      // (e.g. https://musicofthings.github.io/), never /specimen/*. Restrict the key
+      // to the site origin with a trailing /* — not only the project subpath.
+      return "API key blocked for this site's referrer. In Google Cloud → APIs & Services → Credentials → your key → Application restrictions → Websites, add exactly: " + origin + "/*  (and " + origin + "/ if the console allows). Path-only entries like …/specimen/* do not match, because the browser only sends the origin on cross-origin API calls. Save, wait 1–5 minutes, hard-refresh.";
     }
     if(status === 403 && /accessNotConfigured|SERVICE_DISABLED|has not been used/i.test(m + " " + joined)){
       return "YouTube Data API v3 is not enabled for this project. Enable it in Google Cloud → APIs & Services → Library.";

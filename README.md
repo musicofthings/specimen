@@ -30,7 +30,26 @@ No packages to install. The suite covers normalization, handle variants, quota e
 1. Open the [Google Cloud console](https://console.cloud.google.com/) and create a project.
 2. Enable **YouTube Data API v3** under APIs & Services → Library.
 3. Credentials → Create credentials → API key.
-4. **Restrict it.** Click the key, set *Application restrictions* to **Websites**, and add `https://<your-username>.github.io/*`. Then set *API restrictions* to YouTube Data API v3 only.
+4. **Restrict it.** Click the key, set *Application restrictions* to **Websites**, then set *API restrictions* to YouTube Data API v3 only.
+
+### Website restriction patterns (important)
+
+Browsers send only the **origin** as `Referer` on cross-origin calls to `googleapis.com` (not the `/specimen/` path). So these are the patterns that work for GitHub Pages:
+
+| Environment | Add this website restriction |
+|---|---|
+| GitHub Pages (user/org or project site) | `https://<your-username>.github.io/*` |
+| Local static server | `http://localhost/*` and `http://127.0.0.1/*` |
+
+For this project that means at minimum:
+
+```text
+https://musicofthings.github.io/*
+```
+
+**Do not rely only on** `https://musicofthings.github.io/specimen/*` — the Referer Google sees is usually `https://musicofthings.github.io/`, which does not match a `/specimen/*` rule, and you get *Requests from referer … are blocked*.
+
+After saving restrictions, wait one to five minutes, then hard-refresh the page. If it still fails, temporarily set Application restrictions to **None**, confirm the key works, then re-add the origin pattern above.
 
 Step 4 matters. An unrestricted key in a browser can be lifted from your network tab and spent by someone else.
 
