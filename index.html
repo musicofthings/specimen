@@ -78,10 +78,21 @@ button:focus-visible{outline:2px solid var(--collide);outline-offset:2px}
 button[disabled]{opacity:.45;cursor:not-allowed}
 button.ghost{background:transparent;color:var(--ink)}
 button.ghost:hover{background:var(--paper-2)}
-.modes{display:flex;gap:18px;margin-top:14px;flex-wrap:wrap;font-size:13px}
-.modes label{display:flex;gap:7px;align-items:center;cursor:pointer;color:var(--ink-soft)}
+.modes{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;font-size:13px;align-items:center}
+.modes label{
+  display:flex;gap:8px;align-items:center;cursor:pointer;color:var(--ink-soft);
+  border:1px solid var(--rule);padding:8px 12px;background:transparent;
+}
+.modes label:has(input:checked){border-color:var(--ink);color:var(--ink);background:var(--paper-2)}
 .modes input{accent-color:var(--ink)}
 .cost{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-soft);letter-spacing:.06em}
+.mode-hint{font-size:12.5px;color:var(--ink-soft);margin-top:10px;line-height:1.45}
+.strip-empty button,button.linkish{
+  font:inherit;font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.06em;
+  text-transform:uppercase;cursor:pointer;border:none;background:none;color:var(--clear);
+  padding:0;text-decoration:underline;text-underline-offset:3px;
+}
+.strip-empty button:hover,button.linkish:hover{color:var(--ink)}
 
 /* ---------- specimen ---------- */
 .specimen{padding:44px 0 34px;border-bottom:2px solid var(--ink)}
@@ -235,11 +246,12 @@ footer a{color:var(--ink)}
       <input type="text" id="name" placeholder="Type a channel name" autocomplete="off" spellcheck="false">
       <button id="run">Audition</button>
     </div>
-    <div class="modes">
+    <div class="modes" role="radiogroup" aria-label="Scan mode">
       <label><input type="radio" name="mode" value="quick" checked> Handles only <span class="cost" id="costQuick">— units</span></label>
-      <label><input type="radio" name="mode" value="full"> Full scan, finds rival channels <span class="cost" id="costFull">— units</span></label>
+      <label><input type="radio" name="mode" value="full"> Full scan <span class="cost" id="costFull">— units</span></label>
       <span class="cost" id="quota" style="margin-left:auto">Daily quota is 10,000 units by default</span>
     </div>
+    <p class="mode-hint" id="modeHint">Handles only checks @handle availability. Choose <strong>Full scan</strong> to search rival channels and draw the collision strip.</p>
   </div>
 
   <p class="status" id="status" role="status" aria-live="polite" aria-atomic="true"></p>
@@ -342,32 +354,76 @@ footer a{color:var(--ink)}
     el.className = "status" + (isErr ? " err" : "");
   }
 
+  function formatApiError(status, body){
+    var err = body && body.error;
+    var m = (err && err.message) || ("HTTP " + status);
+    var reasons = (err && err.errors) || [];
+    var reason = reasons[0] && reasons[0].reason;
+    var joined = reasons.map(function(e){ return e.reason || e.message; }).filter(Boolean).join("; ");
+
+    if(status === 403 && /quota|dailyLimitExceeded|userRateLimitExceeded/i.test(m + " " + joined)){
+      return "Daily quota exhausted. It resets at midnight Pacific.";
+    }
+    if(status === 403 && /referer|referrer|ipRefererBlocked|API_KEY_HTTP_REFERRER_BLOCKED/i.test(m + " " + joined + " " + reason)){
+      return "API key blocked by HTTP referrer restriction. In Google Cloud → Credentials → your key, add this site's origin (e.g. http://localhost:PORT/* or https://YOURUSER.github.io/*), or temporarily set Application restrictions to None while testing.";
+    }
+    if(status === 403 && /accessNotConfigured|SERVICE_DISABLED|has not been used/i.test(m + " " + joined)){
+      return "YouTube Data API v3 is not enabled for this project. Enable it in Google Cloud → APIs & Services → Library.";
+    }
+    if(status === 400 && /keyInvalid|API key not valid|API_KEY_INVALID/i.test(m + " " + joined + " " + reason)){
+      return "API key is invalid. Paste the full key from Google Cloud → Credentials.";
+    }
+    if(status === 400){
+      return "Bad request from YouTube API: " + m + (reason ? " (" + reason + ")" : "");
+    }
+    if(status === 403){
+      return "Key refused: " + m + (reason ? " (" + reason + ")" : "") + ". Check key restrictions and that YouTube Data API v3 is enabled.";
+    }
+    return m;
+  }
+
   function apiGet(path, params, key){
-    params.key = key;
-    var qs = Object.keys(params).map(function(k){
-      return encodeURIComponent(k)+"="+encodeURIComponent(params[k]);
+    var q = {};
+    Object.keys(params).forEach(function(k){ q[k] = params[k]; });
+    q.key = key;
+    var qs = Object.keys(q).map(function(k){
+      return encodeURIComponent(k)+"="+encodeURIComponent(q[k]);
     }).join("&");
     return fetch(API+path+"?"+qs).then(function(r){
-      return r.json().then(function(j){
-        if(!r.ok){
-          var m = (j && j.error && j.error.message) || ("HTTP "+r.status);
-          if(r.status === 403 && /quota/i.test(m)) m = "Daily quota exhausted. It resets at midnight Pacific.";
-          else if(r.status === 400) m = "Google rejected the key. Check it's valid and that YouTube Data API v3 is enabled.";
-          else if(r.status === 403) m = "Key refused: " + m;
-          throw new Error(m);
-        }
+      return r.text().then(function(text){
+        var j = null;
+        try { j = text ? JSON.parse(text) : {}; }
+        catch(parseErr){ throw new Error("YouTube API returned non-JSON (HTTP " + r.status + ")."); }
+        if(!r.ok) throw new Error(formatApiError(r.status, j));
         return j;
       });
+    }, function(networkErr){
+      throw new Error("Network error reaching YouTube API. Check your connection, ad blockers, and that you are not opening this page as a local file (use a local server or GitHub Pages).");
     });
   }
 
+  /** Resolve whether @handle is taken. Empty items = free. */
   function checkHandle(h, key){
-    return apiGet("channels", { part:"snippet", forHandle:"@"+h }, key)
+    // Docs accept handle with or without @; try bare first, then @-prefixed.
+    return apiGet("channels", { part:"snippet", forHandle: h }, key)
+      .catch(function(){
+        return apiGet("channels", { part:"snippet", forHandle: "@" + h }, key);
+      })
       .then(function(j){
         var taken = !!(j.items && j.items.length);
         return { handle:h, taken:taken, title: taken ? j.items[0].snippet.title : null };
       })
-      .catch(function(e){ return { handle:h, taken:null, error:e.message }; });
+      .catch(function(e){
+        return { handle:h, taken:null, error: e.message || String(e) };
+      });
+  }
+
+  function assertHandlesOk(handles){
+    var failed = handles.filter(function(h){ return h.taken === null; });
+    if(failed.length && failed.length === handles.length){
+      throw new Error(failed[0].error || "All handle checks failed.");
+    }
+    return handles;
   }
 
   function findRivals(name, key){
@@ -421,11 +477,21 @@ footer a{color:var(--ink)}
     }).join("");
   }
 
+  function runFullScan(){
+    var full = document.querySelector('input[name=mode][value=full]');
+    if(full) full.checked = true;
+    updateModeHint();
+    updateCostLabels();
+    $("run").click();
+  }
+
   function renderStrip(rivals, target, didSearch){
     var host = $("stripHost");
     if(!didSearch){
-      host.innerHTML = '<div class="strip-empty">Not scanned — run a full scan to draw this</div>';
-      $("stripCount").textContent = "";
+      host.innerHTML = '<div class="strip-empty">Not scanned — <button type="button" id="stripFullScan" class="linkish">run a full scan</button> to draw this</div>';
+      $("stripCount").textContent = "handles-only mode";
+      var btn = $("stripFullScan");
+      if(btn) btn.addEventListener("click", runFullScan);
       return;
     }
     if(!rivals.length){
@@ -446,12 +512,16 @@ footer a{color:var(--ink)}
 
   function renderHandles(handles){
     $("handles").innerHTML = handles.map(function(h){
-      var tag = h.taken === true
-        ? '<span class="tag taken">Taken</span>'
-        : h.taken === false
-          ? '<span class="tag free">Free</span>'
-          : '<span class="tag unknown">Unknown</span>';
-      var who = h.taken === true && h.title ? '<span style="color:var(--ink-soft)">'+esc(h.title)+'</span>' : "";
+      var tag, who = "";
+      if(h.taken === true){
+        tag = '<span class="tag taken">Taken</span>';
+        who = h.title ? '<span style="color:var(--ink-soft)">'+esc(h.title)+'</span>' : "";
+      } else if(h.taken === false){
+        tag = '<span class="tag free">Free</span>';
+      } else {
+        tag = '<span class="tag unknown" title="'+esc(h.error || "Request failed")+'">Unknown</span>';
+        who = h.error ? '<span style="color:var(--collide);font-size:12px;max-width:280px;text-align:right">'+esc(h.error)+'</span>' : "";
+      }
       return '<div class="handle"><span>@'+esc(h.handle)+'</span><span style="display:flex;gap:12px;align-items:center">'+who+tag+'</span></div>';
     }).join("");
   }
@@ -526,7 +596,9 @@ footer a{color:var(--ink)}
     if(!variants.length){
       return Promise.reject(new Error("Could not derive any valid handle variants from that name."));
     }
-    var jobs = [ Promise.all(variants.map(function(h){ return checkHandle(h, key); })) ];
+    var jobs = [
+      Promise.all(variants.map(function(h){ return checkHandle(h, key); })).then(assertHandlesOk)
+    ];
     jobs.push(mode === "full" ? findRivals(name, key) : Promise.resolve([]));
     return Promise.all(jobs).then(function(res){
       var handles = res[0], rivals = res[1];
@@ -534,6 +606,16 @@ footer a{color:var(--ink)}
       var u = uniqueness(name, rivals, handles, mode === "full");
       return { name:name, target:target, handles:handles, rivals:rivals, m:m, u:u, searched: mode === "full" };
     });
+  }
+
+  function updateModeHint(){
+    var hint = $("modeHint");
+    if(!hint) return;
+    if(currentMode() === "full"){
+      hint.innerHTML = "Full scan checks handles, searches rival channels, and draws the collision strip (~100 extra quota units).";
+    } else {
+      hint.innerHTML = "Handles only checks @handle availability. Choose <strong>Full scan</strong> to search rival channels and draw the collision strip.";
+    }
   }
 
   $("run").addEventListener("click", function(){
@@ -550,7 +632,7 @@ footer a{color:var(--ink)}
 
     var mode = currentMode();
     this.disabled = true;
-    setStatus("Checking…");
+    setStatus(mode === "full" ? "Full scan in progress…" : "Checking handles…");
 
     audition(name, key, mode).then(function(r){
       $("specWord").textContent = r.name;
@@ -564,7 +646,14 @@ footer a{color:var(--ink)}
       renderRivals(r.rivals, r.target, r.searched);
       verdict(r.u.score, r.m.score, r.searched);
       $("result").classList.remove("hidden");
-      setStatus("");
+      var unknown = r.handles.filter(function(h){ return h.taken === null; }).length;
+      if(unknown){
+        setStatus(unknown + " handle check" + (unknown>1?"s":"") + " failed — see details next to Unknown tags.", true);
+      } else if(!r.searched){
+        setStatus("Handles checked. Select Full scan above (or the link under the strip) for rivals and the collision strip.");
+      } else {
+        setStatus("Full scan complete — " + r.rivals.length + " rival channel" + (r.rivals.length===1?"":"s") + " found.");
+      }
     }).catch(function(e){
       setStatus(e.message || "Something went wrong.", true);
     }).then(function(){
@@ -581,9 +670,13 @@ footer a{color:var(--ink)}
   $("name").addEventListener("input", updateCostLabels);
   $("batchlist").addEventListener("input", updateCostLabels);
   document.querySelectorAll('input[name=mode]').forEach(function(el){
-    el.addEventListener("change", updateCostLabels);
+    el.addEventListener("change", function(){
+      updateCostLabels();
+      updateModeHint();
+    });
   });
   updateCostLabels();
+  updateModeHint();
 
   /* ---------- batch ---------- */
   var batchState = null;
